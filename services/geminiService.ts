@@ -916,3 +916,164 @@ export async function editProductImage(imageUrl: string, prompt: string): Promis
   return `data:${mimeType};base64,${inlineData.data}`;
 }
 
+// ========================================
+// 12. 마케팅 카피 생성 (GeneratedCopy)
+// ========================================
+
+export async function generateMarketingCopy(productData: ProductData): Promise<import('../types').GeneratedCopy> {
+  const apiKey = getNanoBananaApiKey();
+
+  const prompt = `너는 한국 쇼핑몰 마케팅 카피라이터 전문가야.
+제품의 특징을 매력적으로 표현하는 마케팅 문구를 작성해줘.
+한국어로 작성하고, 구매 욕구를 자극하는 문구를 만들어줘.
+
+제품명: ${productData.name}
+제품 설명: ${productData.description}
+타겟 고객: ${productData.targetAudience}
+카테고리: ${productData.category || '일반'}
+가격: ${productData.price?.toLocaleString() || '미정'}원
+${productData.promotionText ? `프로모션: ${productData.promotionText}` : ''}
+
+위 제품에 대한 마케팅 카피를 다음 JSON 형식으로 작성해줘:
+{
+  "catchphrase": "짧은 캐치프레이즈 (최대 20자)",
+  "headline": "메인 헤드라인 (최대 40자)",
+  "emotionalBenefit": "감성적 혜택 한 문장",
+  "painPoints": [
+    {"title": "고객 고민1", "description": "상세 설명"},
+    {"title": "고객 고민2", "description": "상세 설명"}
+  ],
+  "solution": "이 제품이 해결하는 핵심 가치",
+  "features": [
+    {"title": "특징1", "subtitle": "부제", "description": "설명"},
+    {"title": "특징2", "subtitle": "부제", "description": "설명"},
+    {"title": "특징3", "subtitle": "부제", "description": "설명"}
+  ],
+  "usageScenarios": [
+    {"situation": "상황1", "benefit": "혜택"},
+    {"situation": "상황2", "benefit": "혜택"},
+    {"situation": "상황3", "benefit": "혜택"}
+  ],
+  "faq": [
+    {"question": "질문1?", "answer": "답변1"},
+    {"question": "질문2?", "answer": "답변2"},
+    {"question": "질문3?", "answer": "답변3"}
+  ],
+  "specs": [
+    {"label": "용량", "value": "값"},
+    {"label": "주요 성분", "value": "값"},
+    {"label": "피부 타입", "value": "값"},
+    {"label": "사용 방법", "value": "값"},
+    {"label": "제품 특징", "value": "값"},
+    {"label": "제품 효과", "value": "값"}
+  ]
+}
+
+JSON만 출력하세요.`;
+
+  const response = await fetch(
+    `https://vip.apiyi.com/v1beta/models/${TEXT_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+      })
+    }
+  );
+
+  if (!response.ok) throw new Error('마케팅 카피 생성 실패');
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  let cleanText = text.trim();
+  const jsonBlockMatch = cleanText.match(/```json\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    cleanText = jsonBlockMatch[1].trim();
+  } else {
+    const codeBlockMatch = cleanText.match(/```\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      cleanText = codeBlockMatch[1].trim();
+    }
+  }
+
+  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('마케팅 카피 JSON 파싱 실패');
+
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ========================================
+// 13. 텍스트 섹션 AI 수정
+// ========================================
+
+export async function refineCopySection(
+  sectionKey: string,
+  currentContent: any,
+  feedback: string
+): Promise<any> {
+  const apiKey = getNanoBananaApiKey();
+
+  const prompt = `너는 한국어 쇼핑몰 마케팅 카피라이터 전문가야. 사용자의 피드백에 따라 콘텐츠를 수정해줘.
+
+섹션명: ${sectionKey}
+
+현재 콘텐츠:
+${JSON.stringify(currentContent, null, 2)}
+
+사용자 피드백:
+"${feedback}"
+
+${typeof currentContent === 'string'
+  ? '위 피드백에 따라 텍스트를 수정해서 문자열로만 응답해줘. JSON 객체로 감싸지 말고 수정된 텍스트만 반환해.'
+  : Array.isArray(currentContent)
+    ? '위 피드백에 따라 배열을 수정해서 JSON 배열 형식으로만 응답해줘.'
+    : '위 피드백에 따라 객체를 수정해서 JSON 객체 형식으로만 응답해줘.'}`;
+
+  const response = await fetch(
+    `https://vip.apiyi.com/v1beta/models/${TEXT_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+      })
+    }
+  );
+
+  if (!response.ok) throw new Error('콘텐츠 수정 실패');
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  let cleanText = text.trim();
+  if (cleanText.includes('```json')) {
+    const start = cleanText.indexOf('```json') + 7;
+    const end = cleanText.lastIndexOf('```');
+    if (end > start) cleanText = cleanText.substring(start, end).trim();
+  } else if (cleanText.includes('```')) {
+    const start = cleanText.indexOf('```') + 3;
+    const end = cleanText.lastIndexOf('```');
+    if (end > start) cleanText = cleanText.substring(start, end).trim();
+  }
+
+  if (typeof currentContent === 'string') {
+    return cleanText.replace(/^["']|["']$/g, '');
+  }
+
+  const parsed = JSON.parse(cleanText);
+  if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && parsed[sectionKey] !== undefined) {
+    return parsed[sectionKey];
+  }
+  return parsed;
+}
+

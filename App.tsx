@@ -3,7 +3,7 @@ import { ProductInput } from './components/ProductInput';
 import { DetailPagePreview } from './components/DetailPagePreview';
 import { SettingsModal, getStoredApiKey } from './components/SettingsModal';
 import { AppState, ProductData, GeneratedCopy, HistoryItem, GeneratedDetailPage } from './types';
-import { generateFullDetailPage, regenerateSection } from './services/geminiService';
+import { generateFullDetailPage, regenerateSection, generateMarketingCopy } from './services/geminiService';
 
 const App: React.FC = () => {
   // Key Management State
@@ -222,31 +222,35 @@ const App: React.FC = () => {
   };
 
   const executeGenerate = async (data: ProductData) => {
-    setState(prev => ({ 
-      ...prev, 
-      step: 'processing', 
-      productData: data, 
-      originalImages: data.images, 
+    setState(prev => ({
+      ...prev,
+      step: 'processing',
+      productData: data,
+      originalImages: data.images,
       generatedImages: [],
       mainImageIndex: 0,
       generationProgress: { current: 0, total: 100, message: '시작 중...' }
     }));
-    
-    try {
-      const result = await generateFullDetailPage(
-        data,
-        (current, total, message) => {
-          setState(prev => ({
-            ...prev,
-            generationProgress: { current, total, message }
-          }));
-        }
-      );
 
-      setState(prev => ({ 
-        ...prev, 
-        step: 'preview', 
-        generatedPage: result
+    try {
+      const [copy, result] = await Promise.all([
+        generateMarketingCopy(data),
+        generateFullDetailPage(
+          data,
+          (current, total, message) => {
+            setState(prev => ({
+              ...prev,
+              generationProgress: { current, total, message }
+            }));
+          }
+        )
+      ]);
+
+      setState(prev => ({
+        ...prev,
+        step: 'preview',
+        generatedPage: result,
+        generatedCopy: copy
       }));
     } catch (error: any) {
       console.error("Error generating content:", error);
@@ -257,6 +261,13 @@ const App: React.FC = () => {
       }
       setState(prev => ({ ...prev, step: 'input' }));
     }
+  };
+
+  const handleCopyUpdate = (sectionKey: keyof GeneratedCopy, newData: any) => {
+    setState(prev => ({
+      ...prev,
+      generatedCopy: prev.generatedCopy ? { ...prev.generatedCopy, [sectionKey]: newData } : null
+    }));
   };
 
   const handleImageUpdate = (newImageUrl: string, index: number) => {
@@ -393,7 +404,7 @@ const App: React.FC = () => {
         images: [] // 원본 이미지(Base64)는 저장하지 않음
       },
       generatedImages: sectionImages,
-      generatedCopy: null, // 새로운 구조에서는 generatedCopy 사용 안 함
+      generatedCopy: state.generatedCopy,
       generatedPage: state.generatedPage, // 새로운 구조 저장
       thumbnail: state.generatedPage?.thumbnail?.imageUrl || sectionImages[0]?.url || '',
       originalImages: state.productData.images.filter(url => !url.startsWith('data:'))  // 외부 URL만 저장
@@ -853,6 +864,7 @@ const App: React.FC = () => {
           <DetailPagePreview 
             generatedPage={state.generatedPage}
             productData={state.productData}
+            copy={state.generatedCopy}
             onSectionUpdate={(sectionId, newImageUrl) => {
               if (newImageUrl === '') {
                 handleSectionRegenerate(sectionId);
@@ -870,6 +882,7 @@ const App: React.FC = () => {
             }}
             onReset={handleReset}
             onSave={saveToHistory}
+            onCopyUpdate={handleCopyUpdate}
             onUndo={handleUndo}
             onRedo={handleRedo}
             canUndo={currentHistoryIndex > 0}
@@ -880,10 +893,7 @@ const App: React.FC = () => {
                 const newSections = [...prev.generatedPage.sections];
                 const [moved] = newSections.splice(fromIndex, 1);
                 newSections.splice(toIndex, 0, moved);
-                return {
-                  ...prev,
-                  generatedPage: { ...prev.generatedPage, sections: newSections }
-                };
+                return { ...prev, generatedPage: { ...prev.generatedPage, sections: newSections } };
               });
             }}
           />
