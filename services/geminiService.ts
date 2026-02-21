@@ -248,7 +248,7 @@ JSON만 출력하세요.
       },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
       })
     }
   );
@@ -262,10 +262,47 @@ JSON만 출력하세요.
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  // ```json 블록 추출
+  let cleanText = text.trim();
+  if (cleanText.includes('```json')) {
+    const start = cleanText.indexOf('```json') + 7;
+    const end = cleanText.lastIndexOf('```');
+    if (end > start) cleanText = cleanText.substring(start, end).trim();
+  } else if (cleanText.includes('```')) {
+    const start = cleanText.indexOf('```') + 3;
+    const end = cleanText.lastIndexOf('```');
+    if (end > start) cleanText = cleanText.substring(start, end).trim();
+  }
+
+  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('기획 생성 실패: JSON 형식이 아닙니다');
-  
-  const parsed = JSON.parse(jsonMatch[0]);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (parseError) {
+    // JSON이 잘린 경우 복구 시도
+    let fixedJson = jsonMatch[0];
+    
+    // 마지막 완전한 객체까지만 잘라내기
+    const lastCompleteObject = fixedJson.lastIndexOf('}');
+    if (lastCompleteObject > 0) {
+      fixedJson = fixedJson.substring(0, lastCompleteObject + 1);
+      // 부족한 괄호 추가
+      const remainOpen = (fixedJson.match(/\[/g) || []).length - (fixedJson.match(/\]/g) || []).length;
+      const remainBrace = (fixedJson.match(/\{/g) || []).length - (fixedJson.match(/\}/g) || []).length;
+      fixedJson += ']'.repeat(Math.max(0, remainOpen));
+      fixedJson += '}'.repeat(Math.max(0, remainBrace));
+    }
+    
+    try {
+      parsed = JSON.parse(fixedJson);
+      console.warn('JSON 복구 성공 (잘린 데이터 수정됨)');
+    } catch {
+      console.error('JSON 복구 실패, 원본:', text);
+      throw new Error('기획 생성 실패: JSON 파싱 오류');
+    }
+  }
   
   return parsed.sections.map((section: any, idx: number) => ({
     id: `section-${idx + 1}`,
@@ -532,7 +569,7 @@ export const analyzeProductImage = async (imageBase64: string): Promise<{
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 500
+          maxOutputTokens: 1024
         }
       })
     }
@@ -548,17 +585,47 @@ export const analyzeProductImage = async (imageBase64: string): Promise<{
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    let cleanContent = content.trim();
+    
+    // ```json ... ``` 블록 추출
+    if (cleanContent.includes('```json')) {
+      const start = cleanContent.indexOf('```json') + 7;
+      const end = cleanContent.lastIndexOf('```');
+      if (end > start) {
+        cleanContent = cleanContent.substring(start, end).trim();
+      }
+    } else if (cleanContent.includes('```')) {
+      const start = cleanContent.indexOf('```') + 3;
+      const end = cleanContent.lastIndexOf('```');
+      if (end > start) {
+        cleanContent = cleanContent.substring(start, end).trim();
+      }
     }
-    throw new Error('JSON 파싱 실패');
+    
+    // JSON 객체 추출
+    const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        productName: parsed.productName || '',
+        brand: parsed.brand || '',
+        category: parsed.category || '',
+        features: Array.isArray(parsed.features) ? parsed.features : []
+      };
+    }
+    throw new Error('JSON 객체를 찾을 수 없음');
   } catch (e) {
     console.error('파싱 오류:', content);
+    
+    // 최후 수단: 텍스트에서 상품명 직접 추출 시도
+    const nameMatch = content.match(/"productName"\s*:\s*"([^"]+)"/);
+    const brandMatch = content.match(/"brand"\s*:\s*"([^"]+)"/);
+    const categoryMatch = content.match(/"category"\s*:\s*"([^"]+)"/);
+    
     return {
-      productName: '',
-      brand: '',
-      category: '',
+      productName: nameMatch ? nameMatch[1] : '',
+      brand: brandMatch ? brandMatch[1] : '',
+      category: categoryMatch ? categoryMatch[1] : '',
       features: []
     };
   }
@@ -825,7 +892,7 @@ export async function editProductImage(imageUrl: string, prompt: string): Promis
             { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
           ]
         }],
-        generationConfig: { responseModalities: ['IMAGE'], resolution: '4K', aspectRatio: '16:9' }
+        generationConfig: { responseModalities: ['IMAGE'], resolution: '4K', aspectRatio: '9:16' }
       })
     }
   );

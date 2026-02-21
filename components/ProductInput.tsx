@@ -423,10 +423,45 @@ export const ProductInput: React.FC<ProductInputProps> = ({ onSubmit, isLoading 
         // 상품명 자동 입력
         setData(prev => ({ ...prev, name: analyzed.productName }));
         
+        // 카테고리 자동 매칭
+        if (analyzed.category) {
+          const categoryMap: Record<string, string> = {
+            '패션': '패션/의류', '의류': '패션/의류', '옷': '패션/의류', '신발': '패션/의류', '가방': '패션/의류', '액세서리': '패션/의류',
+            '뷰티': '뷰티/화장품', '화장품': '뷰티/화장품', '스킨케어': '뷰티/화장품', '메이크업': '뷰티/화장품', '향수': '뷰티/화장품', '세럼': '뷰티/화장품',
+            '식품': '식품/건강', '건강': '식품/건강', '건강식품': '식품/건강', '영양제': '식품/건강', '음료': '식품/건강', '간식': '식품/건강', '비타민': '식품/건강',
+            '생활': '생활/가전', '가전': '생활/가전', '주방': '생활/가전', '가구': '생활/가전', '인테리어': '생활/가전', '청소': '생활/가전',
+            '유아': '유아/키즈', '키즈': '유아/키즈', '아기': '유아/키즈', '어린이': '유아/키즈', '장난감': '유아/키즈',
+            '스포츠': '스포츠/레저', '레저': '스포츠/레저', '운동': '스포츠/레저', '캠핑': '스포츠/레저', '등산': '스포츠/레저',
+            '디지털': '디지털/IT', 'IT': '디지털/IT', '전자': '디지털/IT', '컴퓨터': '디지털/IT', '이어폰': '디지털/IT', '스마트': '디지털/IT',
+            '피규어': '기타', '소품': '기타', '문구': '기타', '반려동물': '기타', '펫': '기타',
+          };
+          
+          let matchedCategory = '기타';
+          const lowerCategory = analyzed.category.toLowerCase();
+          
+          // 정확한 카테고리명 매칭 먼저
+          const exactCategories = ['패션/의류', '뷰티/화장품', '식품/건강', '생활/가전', '유아/키즈', '스포츠/레저', '디지털/IT', '기타'];
+          const exactMatch = exactCategories.find(cat => lowerCategory.includes(cat));
+          if (exactMatch) {
+            matchedCategory = exactMatch;
+          } else {
+            // 키워드 매칭
+            for (const [keyword, cat] of Object.entries(categoryMap)) {
+              if (lowerCategory.includes(keyword.toLowerCase())) {
+                matchedCategory = cat;
+                break;
+              }
+            }
+          }
+          
+          setCategory(matchedCategory);
+          console.log(`카테고리 자동 선택: ${analyzed.category} → ${matchedCategory}`);
+        }
+        
         // 최저가 자동 검색
         await handlePriceSearch(analyzed.productName);
         
-        setToast({ message: `상품 인식: ${analyzed.productName}`, type: 'success' });
+        setToast({ message: `상품 인식: ${analyzed.productName} | 카테고리: ${analyzed.category || '자동 선택'}`, type: 'success' });
       } else {
         setToast({ message: '상품을 인식하지 못했습니다. 직접 검색해주세요.', type: 'error' });
       }

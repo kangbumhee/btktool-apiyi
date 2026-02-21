@@ -207,9 +207,9 @@ const App: React.FC = () => {
   };
 
   const handleInputSubmit = async (data: ProductData) => {
-    // Kie.ai API 키 체크
-    const kieApiKey = localStorage.getItem('nanoBananaApiKey');
-    if (!kieApiKey || !kieApiKey.trim()) {
+    // APIYI API 키 체크
+    const apiyiApiKey = localStorage.getItem('nanoBananaApiKey');
+    if (!apiyiApiKey || !apiyiApiKey.trim()) {
       // API 키 없으면 설정창 열고 대기
       setPendingGenerate(true);
       setPendingProductData(data);
@@ -886,8 +886,8 @@ const App: React.FC = () => {
           setShowSettings(false);
           // 대기 중인 생성 작업이 있고, API 키가 저장되었으면 자동 시작
           if (pendingGenerate && pendingProductData) {
-            const kieApiKey = localStorage.getItem('nanoBananaApiKey');
-            if (kieApiKey && kieApiKey.trim()) {
+            const apiyiApiKey = localStorage.getItem('nanoBananaApiKey');
+            if (apiyiApiKey && apiyiApiKey.trim()) {
               setPendingGenerate(false);
               const dataToGenerate = pendingProductData;
               setPendingProductData(null);
