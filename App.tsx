@@ -854,18 +854,38 @@ const App: React.FC = () => {
             generatedPage={state.generatedPage}
             productData={state.productData}
             onSectionUpdate={(sectionId, newImageUrl) => {
-              setState(prev => ({
-                ...prev,
-                generatedPage: prev.generatedPage ? {
-                  ...prev.generatedPage,
-                  sections: prev.generatedPage.sections.map(s => 
-                    s.id === sectionId ? { ...s, imageUrl: newImageUrl } : s
-                  )
-                } : null
-              }));
+              if (newImageUrl === '') {
+                handleSectionRegenerate(sectionId);
+              } else {
+                setState(prev => ({
+                  ...prev,
+                  generatedPage: prev.generatedPage ? {
+                    ...prev.generatedPage,
+                    sections: prev.generatedPage.sections.map(s => 
+                      s.id === sectionId ? { ...s, imageUrl: newImageUrl } : s
+                    )
+                  } : null
+                }));
+              }
             }}
             onReset={handleReset}
             onSave={saveToHistory}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={currentHistoryIndex > 0}
+            canRedo={currentHistoryIndex < stateHistory.length - 1}
+            onSectionReorder={(fromIndex, toIndex) => {
+              setState(prev => {
+                if (!prev.generatedPage) return prev;
+                const newSections = [...prev.generatedPage.sections];
+                const [moved] = newSections.splice(fromIndex, 1);
+                newSections.splice(toIndex, 0, moved);
+                return {
+                  ...prev,
+                  generatedPage: { ...prev.generatedPage, sections: newSections }
+                };
+              });
+            }}
           />
         )}
       </main>

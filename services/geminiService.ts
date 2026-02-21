@@ -262,18 +262,22 @@ JSON만 출력하세요.
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   
-  // ```json 블록 추출
+  // ```json 블록 추출 (개선된 버전)
   let cleanText = text.trim();
-  if (cleanText.includes('```json')) {
-    const start = cleanText.indexOf('```json') + 7;
-    const end = cleanText.lastIndexOf('```');
-    if (end > start) cleanText = cleanText.substring(start, end).trim();
-  } else if (cleanText.includes('```')) {
-    const start = cleanText.indexOf('```') + 3;
-    const end = cleanText.lastIndexOf('```');
-    if (end > start) cleanText = cleanText.substring(start, end).trim();
+  
+  // 1차: ```json ... ``` 블록 추출
+  const jsonBlockMatch = cleanText.match(/```json\s*([\s\S]*?)```/);
+  if (jsonBlockMatch) {
+    cleanText = jsonBlockMatch[1].trim();
+  } else {
+    // 2차: ``` ... ``` 블록 추출
+    const codeBlockMatch = cleanText.match(/```\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      cleanText = codeBlockMatch[1].trim();
+    }
   }
 
+  // JSON 객체 추출
   const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('기획 생성 실패: JSON 형식이 아닙니다');
 
@@ -284,20 +288,20 @@ JSON만 출력하세요.
     // JSON이 잘린 경우 복구 시도
     let fixedJson = jsonMatch[0];
     
-    // 마지막 완전한 객체까지만 잘라내기
-    const lastCompleteObject = fixedJson.lastIndexOf('}');
-    if (lastCompleteObject > 0) {
-      fixedJson = fixedJson.substring(0, lastCompleteObject + 1);
-      // 부족한 괄호 추가
-      const remainOpen = (fixedJson.match(/\[/g) || []).length - (fixedJson.match(/\]/g) || []).length;
-      const remainBrace = (fixedJson.match(/\{/g) || []).length - (fixedJson.match(/\}/g) || []).length;
-      fixedJson += ']'.repeat(Math.max(0, remainOpen));
-      fixedJson += '}'.repeat(Math.max(0, remainBrace));
+    // 마지막 완전한 } 찾기
+    const lastBrace = fixedJson.lastIndexOf('}');
+    if (lastBrace > 0) {
+      fixedJson = fixedJson.substring(0, lastBrace + 1);
+      // 부족한 괄호 보충
+      const openBrackets = (fixedJson.match(/\[/g) || []).length - (fixedJson.match(/\]/g) || []).length;
+      const openBraces = (fixedJson.match(/\{/g) || []).length - (fixedJson.match(/\}/g) || []).length;
+      fixedJson += ']'.repeat(Math.max(0, openBrackets));
+      fixedJson += '}'.repeat(Math.max(0, openBraces));
     }
     
     try {
       parsed = JSON.parse(fixedJson);
-      console.warn('JSON 복구 성공 (잘린 데이터 수정됨)');
+      console.warn('JSON 복구 성공');
     } catch {
       console.error('JSON 복구 실패, 원본:', text);
       throw new Error('기획 생성 실패: JSON 파싱 오류');

@@ -38,14 +38,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, a
       setTestResult({ success: false, message: 'API 키를 입력해주세요.' });
       return;
     }
-
     setIsTesting(true);
     setTestResult(null);
     setTestImage(null);
-
     try {
-      const url = "https://vip.apiyi.com/v1beta/models/gemini-3-pro-image-preview-1k:generateContent";
-
+      const url = "https://vip.apiyi.com/v1beta/models/gemini-2.5-flash:generateContent";
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -53,55 +50,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, a
           "Authorization": `Bearer ${apiKey.trim()}`
         },
         body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: "A simple red apple on white background, minimal, clean" }]
-            }
-          ],
-          generationConfig: {
-            responseModalities: ["IMAGE"],
-            resolution: "1K",
-            aspectRatio: "1:1"
-          }
+          contents: [{ role: "user", parts: [{ text: "안녕하세요. 테스트입니다. OK라고만 답해주세요." }] }],
+          generationConfig: { maxOutputTokens: 10 }
         }),
-        signal: AbortSignal.timeout(60000)
+        signal: AbortSignal.timeout(30000)
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMsg = errorData.error?.message || `HTTP ${response.status}`;
-
-        if (response.status === 401 || response.status === 403) {
-          throw new Error("API 키가 유효하지 않습니다.");
-        }
-        if (response.status === 429) {
-          throw new Error("크레딧이 부족합니다. api.apiyi.com에서 충전해주세요.");
-        }
+        if (response.status === 401 || response.status === 403) throw new Error("API 키가 유효하지 않습니다.");
+        if (response.status === 429) throw new Error("크레딧이 부족합니다. api.apiyi.com에서 충전해주세요.");
         throw new Error(errorMsg);
       }
-
       const data = await response.json();
-      const parts = data.candidates?.[0]?.content?.parts;
-
-      if (parts) {
-        for (const part of parts) {
-          if (part.inlineData && part.inlineData.data) {
-            const mimeType = part.inlineData.mimeType || "image/png";
-            const imageDataUrl = `data:${mimeType};base64,${part.inlineData.data}`;
-            setTestImage(imageDataUrl);
-            setTestResult({ success: true, message: '✅ API 키가 정상 작동합니다! ($0.05 차감됨)' });
-            setIsTesting(false);
-            return;
-          }
-        }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        setTestResult({ success: true, message: `✅ API 키 정상 작동! 응답: "${text.trim()}"` });
+      } else {
+        throw new Error("응답을 받지 못했습니다.");
       }
-
-      throw new Error("응답에서 이미지를 찾을 수 없습니다.");
-
     } catch (error: any) {
       if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-        setTestResult({ success: false, message: '❌ 시간 초과 (60초). 네트워크를 확인해주세요.' });
+        setTestResult({ success: false, message: '❌ 시간 초과 (30초). 네트워크를 확인해주세요.' });
       } else {
         setTestResult({ success: false, message: `❌ ${error.message}` });
       }
@@ -226,7 +196,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, a
 
           {/* 테스트 비용 안내 */}
           <p className="text-xs text-slate-400 mt-2">
-            💡 테스트 시 1K 이미지 1장이 생성되며 약 $0.05가 차감됩니다.
+            💡 테스트 시 텍스트 모델로 확인하며 비용이 거의 들지 않습니다.
           </p>
 
           {/* 버튼들 */}
